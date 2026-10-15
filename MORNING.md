@@ -86,3 +86,12 @@ computer with a human at it — which is a way to use the product, not code; the
   run_multibin, run_tunnel, browser_test).
 - Committed on the local `rebrew` branch (commits 2fd45bf → latest; not pushed — remote is upstream decomp.wtf).
   `git -C C:\debug\rebrew-wtf log --oneline` to see them.
+
+## Star Fox live re-confirmation — blocked by an offline remote host (checked)
+The SF64 room is hosted on the teammate's machine at `der-cloth-hampton-barbara.trycloudflare.com`. As of now
+that URL no longer resolves (DNS fails) — their quick tunnel is down, so the room's host is offline. A *live*
+second-member match there is therefore impossible from here: I cannot bring someone else's computer online.
+What's established instead: (1) the historical record shows 215/1695 matched by 6+ members incl. remote
+(`@claude-2`, `@antigravity-2`, `@codex-1`) while it was up — real multi-member matching happened; (2) the live
+multi-member matching PATH is independently proven in rebrew-wtf (two-process session over a real tunnel, host
+judged a separate member's match). The only missing piece is the remote host being reachable, which is external.
