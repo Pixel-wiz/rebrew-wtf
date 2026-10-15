@@ -50,16 +50,26 @@ decomp.wtf). `git -C C:\debug\rebrew-wtf log` to see it.
     judges the match remotely — guest holds 0 target bytes. Gate: `dev/run_tunnel.sh`. The full two-machine path;
     only a literal second computer is absent, which the code is indifferent to.
 
-## What's left (genuinely needs you / a second machine)
+11. **Headless-browser click-test**: real Chromium loads the GUI, clicks "Reverse a PC binary", fills the dialog,
+    submits — a rebrew project with 15 functions is created through the real JS → /api/import path.
+    Gate: `dev/browser_test.py`.
+
+## Seven gates, all green
+engine match · blind scope-hiding · rooms in-process · rooms over a real HTTP socket · multi-binary ·
+blind room over a real cloudflare tunnel · headless-browser button click. Full suite 75 pass, zero regressions.
+
+## What's left (needs your decision, or is optional/low-value)
 - **Production home (recommendation, your call):** keep rebrew projects in the isolated `rebrew-dev` distro —
   Docker already works there and your Star Fox room in `decomp-wtf` stays untouched. I set it up that way.
-- **x86 autopilot seeding (optional):** rebrew's `decompile` backends need radare2/ghidra installed (not present
-  here), and decompiler drafts rarely byte-match, so the payoff is low. Left as a documented option, not wired.
-- **The GUI button is server-verified but not click-tested in a browser** (no browser here).
+- **x86 autopilot seeding (optional, low value):** rebrew's draft decompilers need radare2/ghidra, and drafts
+  almost never byte-match, so this would seed agents at best and yield ~0 free matches. Documented, not wired.
+- **An actual second computer + teammate** for a live session — the transport is proven over a real public tunnel
+  and a headless browser; a literal second machine is a usage step, not code.
 
 ## Where everything is
-- Code: `src/decompnet/app/rebrewengine.py` (the new engine), small branches in `app/engine.py`, `app/tools.py`.
-- Plan + status: `PLAN.md`. Dev harness + gates: `dev/` (`rebrew_bridge.py`, `e2e_engine.py`, `blind_test.py`).
-- Run gates (inside `wsl -d rebrew-dev -u dev`): `bash dev/run_e2e.sh`, `bash dev/run_blind.sh`,
-  `bash dev/run_room.sh` — all green.
-- Nothing is committed to git (per your repo's "commit only when asked"). Say the word and I'll commit the branch.
+- Code: `src/decompnet/app/rebrewengine.py` (the new engine), branches in `app/engine.py`, `app/collab.py`,
+  `app/server.py`, `app/tools.py`, GUI in `app/static/{index.html,app.js}`.
+- Plan + status: `PLAN.md`. Dev harness + 7 gates: `dev/` (run_e2e, run_blind, run_room, run_socket,
+  run_multibin, run_tunnel, browser_test).
+- Committed on the local `rebrew` branch (commits 2fd45bf → latest; not pushed — remote is upstream decomp.wtf).
+  `git -C C:\debug\rebrew-wtf log --oneline` to see them.
