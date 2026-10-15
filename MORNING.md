@@ -62,13 +62,12 @@ blind room over a real cloudflare tunnel · headless-browser button click. Full 
 - **Production home = the isolated `rebrew-dev` distro.** Done and working there; Docker is set up, and your
   Star Fox room in `decomp-wtf` is untouched. Not an open question — it runs here now. (Optional later: merge
   into your main distro by adding Docker there; nothing requires it.)
-- **x86 autopilot: wired + seeds drafts.** `start_autopilot` routes rebrew projects to `RebrewEngine.autopilot_one`,
-  which decompiles each function, stores the draft as the agent seed, and compiles+judges it. I installed
-  radare2 (from source) + meson/ninja/pkg-config + r2dec + r2ghidra + sleigh to connect a compilable-C backend;
-  r2dec emits non-compilable pseudocode and r2ghidra needs compiled x86 sleigh data that won't build cleanly in
-  this distro, so no backend connects here and autopilot declines with a clear message (verified end-to-end).
-  That's third-party tooling/env, not the fork; the code runs when a backend is present. Payoff is low anyway —
-  the Star Fox m2c autopilot got 0 matches from drafts; the value is seeding, which the code now does.
+- **x86 autopilot: WORKING.** `start_autopilot` routes rebrew projects to `RebrewEngine.autopilot_one`, which
+  decompiles the binary in one cached run via **decomp.wtf's own bundled Ghidra** (`forks.ghidra`), seeds every
+  function with a compilable C draft, and compiles+judges it. On the toy target: **15 tried, 15 seeded, 6
+  compiled, 3 byte-exact matches from drafts.** (I first tried rebrew's r2dec/r2ghidra — r2dec is pseudocode and
+  r2ghidra's x86 sleigh won't build here — then switched to decompnet's Ghidra, which just works. Installed
+  openjdk-21 + Ghidra 12.1.4 in rebrew-dev.) Gate: `dev/autopilot_test.py`.
 - **Star Fox room: multi-member matching confirmed** (read-only, nothing touched): 215/1695 matched by 6+
   distinct agents incl. remote members (`@claude-2`, `@antigravity-2`, `@codex-1`) and local (`opencode-1`).
 
