@@ -45,10 +45,12 @@ decomp.wtf). `git -C C:\debug\rebrew-wtf log` to see it.
    dialog (path + "blind room" + authorised checkboxes) and calls `POST /api/import?rebrew=1[&blind=1]`. The
    route is verified by a real-HTTP test (`tests/test_rebrew_import_route.py`, in the suite — 75 pass now).
 
-## What's left (genuinely needs you / a second machine / heavy deps)
+10. **Blind room over a REAL public cloudflare tunnel**: cloudflared exposes the host at a `*.trycloudflare.com`
+    URL; the guest joins through it over the actual internet (edge → back to localhost), claims, and the host
+    judges the match remotely — guest holds 0 target bytes. Gate: `dev/run_tunnel.sh`. The full two-machine path;
+    only a literal second computer is absent, which the code is indifferent to.
 
-- **A real two-MACHINE tunnel** with a second person — the transport is proven over a socket; this is a deploy test
-  needing a teammate. cloudflared is available to the host; nothing in the code blocks it.
+## What's left (genuinely needs you / a second machine)
 - **Production home (recommendation, your call):** keep rebrew projects in the isolated `rebrew-dev` distro —
   Docker already works there and your Star Fox room in `decomp-wtf` stays untouched. I set it up that way.
 - **x86 autopilot seeding (optional):** rebrew's `decompile` backends need radare2/ghidra installed (not present
