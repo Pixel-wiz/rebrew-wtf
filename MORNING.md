@@ -29,14 +29,31 @@ fail). Patched reproducibly (`dev/patch_rebrew_elf.py`); worth upstreaming to ma
      disassembly (opaque `fcn_<addr>`) on claim and judges every attempt remotely. Verified: the guest matched
      the function while holding **1 function and 0 bytes of the binary** — nothing about your binary leaves the host.
 
-## What's designed but not finished (all smaller than what's done)
+6. **Rooms over a real HTTP socket** (not just in-process): host served by uvicorn on 127.0.0.1, guest joins with
+   a real httpx client. Blind room matched over the wire; guest held 0 target bytes. A cloudflare tunnel only adds
+   NAT traversal on top of this exact path.
+7. **Multi-binary projects** (an exe + its DLLs in one effort): `import_binaries([...])` namespaces each binary's
+   functions by unit so an exe and a DLL that share an address or name never collide. Verified: one project over
+   two binaries, a function matched from each.
+8. **Import endpoint**: `POST /api/import?rebrew=1[&blind=1]` creates a rebrew project (single binary). Library
+   calls `net.rebrew.import_binary` / `import_binaries` cover single and multi.
 
-- **Two-machine room over a real tunnel**: rooms are proven in-process; this is just the network-transport check.
-- **Import UI/MCP**: `import_binary` works as a library call; it still needs a GUI "new project" button and/or
-  an MCP tool. Multi-binary projects (an exe + its DLLs) are allowed by the schema but the importer does one binary.
-- **Production home**: rebrew's compilers need Docker. I built an isolated WSL distro `rebrew-dev` for this so
-  your Star Fox room (in `decomp-wtf`) is untouched. Decide whether prod runs there or Docker gets added to
-  the main distro.
+The `rebrew` branch is **committed locally** (commit 2fd45bf; not pushed — your repo's remote is upstream
+decomp.wtf). `git -C C:\debug\rebrew-wtf log` to see it.
+
+9. **GUI button + import route**: a "Reverse a PC binary (.exe/.dll/ELF)" button on the start screen opens a
+   dialog (path + "blind room" + authorised checkboxes) and calls `POST /api/import?rebrew=1[&blind=1]`. The
+   route is verified by a real-HTTP test (`tests/test_rebrew_import_route.py`, in the suite — 75 pass now).
+
+## What's left (genuinely needs you / a second machine / heavy deps)
+
+- **A real two-MACHINE tunnel** with a second person — the transport is proven over a socket; this is a deploy test
+  needing a teammate. cloudflared is available to the host; nothing in the code blocks it.
+- **Production home (recommendation, your call):** keep rebrew projects in the isolated `rebrew-dev` distro —
+  Docker already works there and your Star Fox room in `decomp-wtf` stays untouched. I set it up that way.
+- **x86 autopilot seeding (optional):** rebrew's `decompile` backends need radare2/ghidra installed (not present
+  here), and decompiler drafts rarely byte-match, so the payoff is low. Left as a documented option, not wired.
+- **The GUI button is server-verified but not click-tested in a browser** (no browser here).
 
 ## Where everything is
 - Code: `src/decompnet/app/rebrewengine.py` (the new engine), small branches in `app/engine.py`, `app/tools.py`.

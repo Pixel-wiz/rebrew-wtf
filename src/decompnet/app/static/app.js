@@ -483,6 +483,22 @@ $("pathPick").onclick = (e) => {
     runImport(`confirmed=1&path=${encodeURIComponent(path)}`, undefined, "Analysing your game…");
   };
 };
+$("binPick").onclick = (e) => {
+  e.stopPropagation();
+  const body = dialog("Reverse a PC binary", `<p class="muted">Byte-matching decompilation of a program you're authorised to reverse (PE .exe/.dll or ELF), one function at a time, judged by rebrew. Needs a path on this computer.</p>
+    <label class="field"><span>Path to the binary</span><input id="bpPath" class="mono" placeholder="/home/me/bins/target.dll"></label>
+    <label class="check"><input type="checkbox" id="bpBlind"><span><b>Blind room</b>: teammates who join get one function's disassembly at a time and never the binary, its names, or the scope. You hold the binary and judge every attempt.</span></label>
+    <label class="check"><input type="checkbox" id="bpOwn"><span>I'm authorised to reverse this binary. The results stay with me for my own use.</span></label>
+    <div class="row"><button class="primary" id="bpGo" type="button" disabled>Start</button><button class="ghost" data-close type="button">Cancel</button></div>`);
+  body.querySelector("#bpOwn").onchange = () => { $("bpGo").disabled = !$("bpOwn").checked; };
+  body.querySelector("#bpGo").onclick = () => {
+    const path = $("bpPath").value.trim();
+    if (!path) return;
+    $("dialog").hidden = true;
+    const blind = $("bpBlind").checked ? "&blind=1" : "";
+    runImport(`confirmed=1&rebrew=1${blind}&path=${encodeURIComponent(path)}`, undefined, "Analysing the binary…");
+  };
+};
 $("demoBtn").onclick = () => runImport("demo=1", undefined, "Opening Demo Quest 64…");
 
 /* ------------------------------------------------------------------ project */

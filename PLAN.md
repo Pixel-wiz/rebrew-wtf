@@ -24,7 +24,8 @@ with decomp.wtf's dashboard, MCP tools, agents and team rooms.
 - Full fork suite: 74 passed / 3 failed / 17 errors — IDENTICAL with and without my changes (failures are
   environmental: missing game toolchains + git identity in rebrew-dev), so zero regressions.
 
-## Steps 1-6 all DONE and verified. Remaining (next session, smaller):
+## Steps 1-6 all DONE + verified. Plus: real-HTTP-socket room, multi-binary (import_binaries), import route
+## `/api/import?rebrew=1[&blind=1]` + GUI "Reverse a PC binary" button (route tested in suite). Remaining:
 - Two-machine room test over a real trycloudflare tunnel (in-process is proven; this is the network-transport check).
 - Import entry: expose `import_binary` via an MCP tool + the GUI "new project" flow (works as a library call now).
 - Multi-binary project (exe + its DLLs) = several targets in one project (schema allows it; importer does one binary).
