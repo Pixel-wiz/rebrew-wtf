@@ -1342,6 +1342,8 @@ class RomNetwork(Network):
         if (fork := self.fork_slug(slug)):  # a GameCube, Wii or DS game started from scratch: its own build judges
             ids = self.forks.autopilot_prepare(fork)
             try_one, workers = self.forks.autopilot_one, min(workers, 2)  # each try builds a file: fewer at once
+        elif self.rebrew.is_rebrew(self._project(slug)):
+            ids, try_one, workers = self.rebrew.autopilot_prepare(slug), self.rebrew.autopilot_one, min(workers, 2)
         else:
             if not seeds.available():
                 raise NetworkError("autopilot needs m2c, the draft decompiler: install it in Setup")

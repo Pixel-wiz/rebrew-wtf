@@ -309,6 +309,78 @@ class RebrewEngine:
             cand = FunctionObj(fn["name"], arch, False, cmp.obj_bytes or b"", [])
         return cand, bool(cmp.matched), problems
 
+    # ------------------------------------------------- autopilot (x86 drafts)
+
+    def autopilot_prepare(self, slug: str) -> list[int]:
+        """Open functions, smallest first, for autopilot to try a decompiler draft on. Needs a rebrew decompiler
+        backend (r2dec/r2ghidra/ghidra); raises a clear message if none is available, like the m2c path does."""
+        proj = self.net._project(slug)
+        if self._decompiler(proj) is None:
+            raise NetworkError("x86 autopilot needs a decompiler backend (radare2 + r2dec, or ghidra) reachable "
+                               "by rebrew; agents still work without it")
+        return [r["id"] for r in self.net.store.all(
+            "SELECT id FROM functions WHERE project_id=? AND status='open' ORDER BY n_insns, vram", proj["id"])]
+
+    def _decompiler(self, proj) -> str | None:
+        """First rebrew decompiler backend that actually answers for this project, or None."""
+        import subprocess
+
+        root = json.loads(proj["config"])["rebrew"]["root"]
+        fn = self.net.store.one("SELECT vram FROM functions WHERE project_id=? AND status='open' ORDER BY n_insns LIMIT 1",
+                                proj["id"])
+        if not fn:
+            return None
+        for backend in ("r2dec", "r2ghidra", "ghidra"):
+            try:
+                r = subprocess.run(["rebrew", "decompile", hex(fn["vram"]), "--decompiler", backend, "--json"],
+                                   cwd=root, capture_output=True, text=True, env=_osenv(), timeout=120)
+                if r.returncode == 0 and '"error"' not in r.stdout:
+                    return backend
+            except Exception:  # noqa: BLE001
+                continue
+        return None
+
+    def autopilot_one(self, agent, proj, fid: int) -> str:
+        """Decompile one function with rebrew, compile+judge the draft, seed it as the best attempt. Mirrors the
+        ROM autopilot's claim bookkeeping. match | near | far | fail | skip."""
+        import subprocess
+
+        now = time.time()
+        root = json.loads(proj["config"])["rebrew"]["root"]
+        backend = getattr(self, "_ap_backend", None) or self._decompiler(proj)
+        self._ap_backend = backend
+        with self.net.store.tx() as db:
+            self.net._expire_claims(db)
+            fn = db.execute("SELECT * FROM functions WHERE id=?", (fid,)).fetchone()
+            if fn is None or fn["status"] != "open" or db.execute("SELECT 1 FROM claims WHERE function_id=?", (fid,)).fetchone():
+                return "skip"
+            db.execute("INSERT INTO claims VALUES(?,?,?,?)", (fid, agent.id, now, now + 300))
+        try:
+            ctx = self.net._context(proj["id"], fn["unit"])
+            try:
+                r = subprocess.run(["rebrew", "decompile", hex(fn["vram"]), "--decompiler", backend, "--json"],
+                                   cwd=root, capture_output=True, text=True, env=_osenv(), timeout=120)
+                draft = (json.loads(r.stdout).get("code") or "") if r.returncode == 0 else ""
+            except Exception:  # noqa: BLE001
+                draft = ""
+            if not draft.strip() or not backend:
+                return "fail"
+            source = f"/* draft via rebrew {backend}, tried by autopilot */\n{draft}\n"
+            result = self.compile(proj, ctx["header"], source)
+            if not result.ok:
+                return "fail"
+            cand, verdict, _ = self.evaluate(fn, proj, result.obj)
+            if cand is None:
+                return "fail"
+            from .. import scoring
+            d = scoring.diff(self.target_obj(fn, proj), cand)
+            score = 0 if verdict else max(1, d.score)
+            self.net._record(fn, agent, score, source, ctx["version"], matched=bool(verdict))
+            return "match" if verdict else "near" if d.percent >= 90 else "far"
+        finally:
+            with self.net.store.tx() as db:
+                db.execute("DELETE FROM claims WHERE function_id=? AND agent_id=?", (fid, agent.id))
+
     def overview(self, slug: str, proj, agg) -> dict:
         """Dashboard/room overview for a rebrew project (its toolchain lives in rebrew, not decompnet)."""
         cfg = json.loads(proj["config"])
