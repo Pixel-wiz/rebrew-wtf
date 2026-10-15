@@ -330,7 +330,7 @@ class RebrewEngine:
                                 proj["id"])
         if not fn:
             return None
-        for backend in ("r2dec", "r2ghidra", "ghidra"):
+        for backend in ("r2ghidra", "ghidra", "r2dec"):  # r2ghidra/ghidra give compilable C; r2dec is pseudocode
             try:
                 r = subprocess.run(["rebrew", "decompile", hex(fn["vram"]), "--decompiler", backend, "--json"],
                                    cwd=root, capture_output=True, text=True, env=_osenv(), timeout=120)
@@ -365,10 +365,13 @@ class RebrewEngine:
                 draft = ""
             if not draft.strip() or not backend:
                 return "fail"
+            # store the decompiler draft as the agent's starting point, compile or not
+            with self.net.store.tx() as db:
+                db.execute("UPDATE functions SET seed=? WHERE id=?", (draft, fid))
             source = f"/* draft via rebrew {backend}, tried by autopilot */\n{draft}\n"
             result = self.compile(proj, ctx["header"], source)
             if not result.ok:
-                return "fail"
+                return "far"  # draft kept as a seed for agents even though it didn't compile as-is
             cand, verdict, _ = self.evaluate(fn, proj, result.obj)
             if cand is None:
                 return "fail"
