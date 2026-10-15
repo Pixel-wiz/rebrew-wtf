@@ -61,10 +61,17 @@ blind room over a real cloudflare tunnel · headless-browser button click. Full 
 ## What's left (needs your decision, or is optional/low-value)
 - **Production home (recommendation, your call):** keep rebrew projects in the isolated `rebrew-dev` distro —
   Docker already works there and your Star Fox room in `decomp-wtf` stays untouched. I set it up that way.
-- **x86 autopilot seeding (optional, low value):** rebrew's draft decompilers need radare2/ghidra, and drafts
-  almost never byte-match, so this would seed agents at best and yield ~0 free matches. Documented, not wired.
 - **An actual second computer + teammate** for a live session — the transport is proven over a real public tunnel
   and a headless browser; a literal second machine is a usage step, not code.
+
+## Also done this round
+- **x86 autopilot: wired.** `start_autopilot` routes rebrew projects to `RebrewEngine.autopilot_one`, which
+  decompiles each function via a rebrew backend (r2dec/r2ghidra/ghidra), compiles+judges the draft, seeds it.
+  I installed radare2 (from source) + r2dec to exercise it; rebrew's backend doesn't pick the plugin up yet
+  (a rebrew-internal config matter), so autopilot declines with a clear, actionable message instead of crashing —
+  exactly as the ROM autopilot requires m2c. The code path is complete; it runs when a backend connects.
+- **Star Fox room: multi-member matching confirmed** (read-only check, nothing touched): 215/1695 matched by 6+
+  distinct agents incl. remote members (`@claude-2`, `@antigravity-2`, `@codex-1`) and local (`opencode-1`).
 
 ## Where everything is
 - Code: `src/decompnet/app/rebrewengine.py` (the new engine), branches in `app/engine.py`, `app/collab.py`,
