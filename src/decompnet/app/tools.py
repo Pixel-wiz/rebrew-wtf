@@ -153,7 +153,7 @@ HANDLERS: dict[str, Callable[..., str]] = {
     "split_function": lambda net, agent, slug, function, at, new_name="":
         net.split_function(agent, slug, function, at, new_name),
     "read_data": lambda net, agent, slug, what, length=64: net.read_data(slug, what, length),
-    "list_functions": lambda net, agent, slug, status="open", limit=40: net.list_functions(slug, status, limit),
+    "list_functions": lambda net, agent, slug, status="open", limit=40: net.list_functions(slug, status, limit, agent),
     "add_note": lambda net, agent, slug, text, function="": net.add_note(agent, slug, text, function or None),
     "search_notes": lambda net, agent, slug, query: net.search_notes(slug, query),
     "find_similar": lambda net, agent, slug, function, limit=5: net.find_similar(slug, function, limit),

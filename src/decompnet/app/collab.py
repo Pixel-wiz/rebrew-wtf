@@ -331,6 +331,15 @@ def host_app(net, rooms: dict[str, Room]) -> Starlette:
             raise NetworkError("this invite link is no longer valid")
         cfg = room.cfg
         ov = net.overview(room.slug)
+        if cfg.get("kind") == "rebrew":
+            blind = bool(cfg.get("blind"))
+            # A blind room reveals nothing about what the binary is — not even its name or size.
+            return {"room": room.slug, "kind": "rebrew", "blind": blind,
+                    "title": "a private binary" if blind else (room.proj["name"] or "a binary"),
+                    "arch": cfg.get("arch"), "format": cfg.get("format"),
+                    "sha1": None if blind else cfg.get("program_sha1"), "compiler": cfg["compiler"],
+                    "functions": 0 if blind else ov["functions"], "matched": 0 if blind else ov["matched"],
+                    "members": len(room.members()), **room.settings}
         if room.fork:
             return {"room": room.slug, **forkroom.hello(net, room.slug), "functions": ov["functions"],
                     "matched": ov["matched"], "members": len(room.members()), **room.settings}
@@ -354,12 +363,18 @@ def host_app(net, rooms: dict[str, Room]) -> Starlette:
     def claim(room, member, d):
         agent = room.agent_for(member, d.get("agent"))
         fn = net.claim_row(agent, room.slug, d.get("function") or None, str(d.get("strategy") or "easiest"))
-        return {"function": fn["name"] if fn else None, "vram": fn["vram"] if fn else None}
+        out = {"function": fn["name"] if fn else None, "vram": fn["vram"] if fn else None}
+        if fn and room.cfg.get("kind") == "rebrew":
+            out["asm"] = fn["asm"]  # a blind-room member works from the host's asm (names already fcn_<va>)
+        return out
 
     def attempt(room, member, d):
         agent = room.agent_for(member, d.get("agent"))
         res = net.attempt(agent, str(d.get("function", "")), str(d.get("source", "")), room.slug)
-        return {"score": res["score"], "matched": res["matched"]}
+        out = {"score": res["score"], "matched": res["matched"]}
+        if room.cfg.get("kind") == "rebrew":
+            out["text"] = res["text"]  # blind member has no local judge; the host's diff is their only feedback
+        return out
 
     def best(room, member, d):
         """A member's attempt got better: kept as the function's best so far, as reported (no compile here: the host
@@ -559,6 +574,10 @@ class Link:
     def claim(self, agent: Agent, function: str | None, strategy: str) -> str | None:
         return self._req("POST", "/collab/claim", {"agent": agent.name, "function": function, "strategy": strategy})["function"]
 
+    def claim_full(self, agent: Agent, function: str | None, strategy: str) -> dict:
+        """Full host claim response (incl. asm for a blind-room member who has no local copy)."""
+        return self._req("POST", "/collab/claim", {"agent": agent.name, "function": function, "strategy": strategy})
+
     def attempt(self, agent: Agent, function: str, source: str) -> dict:
         return self._req("POST", "/collab/attempt", {"agent": agent.name, "function": function, "source": source})
 
@@ -719,6 +738,8 @@ def join_room(net, link: str, name: str, rom: bytes | Path, log=print, client: h
     slug, _info = _linked_project(net, hello["sha1"], hello["room"])
     if slug:
         return reconnect(net, slug, link, log=log, client=client, start=start)
+    if hello.get("kind") == "rebrew":
+        return _join_rebrew(net, http, url, code, hello, name, rom, log, client, start)
     if not rom:
         raise NetworkError("pick your own copy of the game to join")
     if hello.get("kind") == "fork":
@@ -738,6 +759,51 @@ def join_room(net, link: str, name: str, rom: bytes | Path, log=print, client: h
                           confirmed=True, log=log)
     net.link_project(slug, {"url": url, "room": hello["room"], "token": joined["token"], "member": joined["name"],
                             "host_title": hello["title"]}, client=client, start=start)
+    log(f"linked as {joined['name']}: your agents now work with the room")
+    return slug
+
+
+def _join_rebrew(net, http: httpx.Client, url: str, code: str, hello: dict, name: str, binary: bytes | Path | None,
+                 log, client: httpx.Client | None, start: bool) -> str:
+    """Join a rebrew (PC-binary) room. Blind room: join thin — no binary, no local scope; claim hands out one
+    function's asm at a time and the host judges every attempt. Non-blind: import the member's own copy locally
+    and work like a ROM-room member (the host confirms matches)."""
+    import hashlib
+
+    blind = bool(hello.get("blind"))
+    r = http.post(f"{url}/collab/join?room={hello['room']}",
+                  json={"invite": code, "name": name, "sha1": "" if blind else (hello.get("sha1") or "")})
+    joined = r.json()
+    if r.status_code != 200:
+        raise NetworkError(joined.get("error", "couldn't join"))
+    link_info = {"url": url, "room": hello["room"], "token": joined["token"], "member": joined["name"],
+                 "host_title": hello["title"]}
+
+    if blind:
+        # Thin member: a local project with the room's compiler but NO functions and NO binary. Claims,
+        # function asm and verdicts all come from the host over the link; nothing about the binary is stored here.
+        slug = net.rebrew.create_member_shell(hello, link_info, log=log)
+        net.link_project(slug, link_info, client=client, start=start)
+        log(f"joined a blind room as {joined['name']}: claim a function to receive it; the host judges your work")
+        return slug
+
+    if not binary:
+        raise NetworkError("pick your own copy of the binary to join this room")
+    data = binary.read_bytes() if isinstance(binary, Path) else binary
+    if hello.get("sha1") and hashlib.sha1(data).hexdigest() != hello["sha1"]:
+        raise NetworkError("this isn't the same binary as the host's: every member of a non-blind room needs "
+                           "their own copy of exactly the same file")
+    log(f"joining {hello['title']} ({hello['functions']} functions, {hello['matched']} matched)")
+    import tempfile
+    with tempfile.NamedTemporaryFile(prefix="decomp-join-", suffix=".bin", delete=False) as tf:
+        tf.write(data)
+        tmp = Path(tf.name)
+    try:
+        slug = net.rebrew.import_binary(tmp, toolchain=hello["compiler"]["toolchain"], confirmed=True,
+                                        name=hello["title"], log=log)
+    finally:
+        tmp.unlink(missing_ok=True)
+    net.link_project(slug, link_info, client=client, start=start)
     log(f"linked as {joined['name']}: your agents now work with the room")
     return slug
 

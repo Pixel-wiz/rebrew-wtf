@@ -382,15 +382,25 @@ def build(net: RomNetwork, home: Path, port: int, secret: str):
                     return fail(ValueError("the file was empty"))
         uploaded = isinstance(game, Path) and game.parent.parent == home / "uploads"
 
+        rebrew = q.get("rebrew") == "1"   # import a PC binary (PE/ELF) as a rebrew project
+        blind = q.get("blind") == "1"
+
         def work(log):
             try:
-                slug = net.import_rom(game, toolchain=toolchain, confirmed=True, name=name, log=log)
+                if rebrew:
+                    if not isinstance(game, Path):
+                        raise ValueError("a rebrew import needs a binary on disk (a local path or an upload)")
+                    slug = net.rebrew.import_binary(game, toolchain=toolchain or "gcc-14.2.0",
+                                                    confirmed=True, name=name, blind=blind, log=log)
+                else:
+                    slug = net.import_rom(game, toolchain=toolchain, confirmed=True, name=name, log=log)
             finally:
                 if uploaded:
                     shutil.rmtree(game.parent, ignore_errors=True)
             settings.data["last_project"] = slug
             settings.save()
-            autopilot(slug)
+            if not rebrew:  # rebrew autopilot would need m2c for x86; not wired yet
+                autopilot(slug)
             return {"slug": slug}
         return JSONResponse({"job": jobs.start("import", work)})
 

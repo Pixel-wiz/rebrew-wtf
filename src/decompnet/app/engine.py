@@ -137,6 +137,8 @@ class RomNetwork(Network):
         self.autopilots: dict[str, dict] = {}  # slug -> progress of trying every function's machine draft
         from .forkengine import ForkEngine  # forks build on this class's claims, attempts and live view
         self.forks = ForkEngine(self)
+        from .rebrewengine import RebrewEngine  # PC-binary projects judged by rebrew's byte compare
+        self.rebrew = RebrewEngine(self)
 
     # ------------------------------------------------------------------ basics
 
@@ -268,7 +270,14 @@ class RomNetwork(Network):
         cfg = self.cfg(proj)
         return match.target_from_split(rf, syms.resolve, cfg.get("big_endian", True), cfg.get("gp", 0))
 
+    def _compile(self, proj, header: str, source: str):
+        if self.rebrew.is_rebrew(proj):
+            return self.rebrew.compile(proj, header, source)
+        return super()._compile(proj, header, source)
+
     def _target_obj(self, fn, proj):
+        if self.rebrew.is_rebrew(proj):
+            return self.rebrew.target_obj(fn, proj)
         if not self.is_rom(proj):
             return super()._target_obj(fn, proj)
         if self.cfg(proj).get("platform") == "gba":
@@ -276,6 +285,8 @@ class RomNetwork(Network):
         return match.canonical_target(self._rom_target(fn), self.symbols(proj["id"]))
 
     def _evaluate(self, fn, proj, obj: bytes):
+        if self.rebrew.is_rebrew(proj):
+            return self.rebrew.evaluate(fn, proj, obj)
         if not self.is_rom(proj):
             return super()._evaluate(fn, proj, obj)
         if self.cfg(proj).get("platform") == "gba":
@@ -639,10 +650,23 @@ class RomNetwork(Network):
 
     # ------------------------------------------------------------------ agent tools for ROMs
 
-    def list_functions(self, project: str | None, status: str = "open", limit: int = 40) -> str:
+    def list_functions(self, project: str | None, status: str = "open", limit: int = 40,
+                       agent: Agent | None = None) -> str:
         if (fork := self.fork_slug(project)):
             return self.forks.list_functions(fork, status, limit)
         proj = self._project(project)
+        # Blind project: a member sees only the functions they hold a claim on (never the scope);
+        # the host (owner-trusted, no agent passed) sees everything.
+        if self.rebrew.is_rebrew(proj) and self.rebrew.is_blind(proj) and agent is not None and not agent.trusted:
+            rows = self.store.all(
+                "SELECT f.name, f.vram, f.n_insns, f.status, f.best_score FROM functions f "
+                "JOIN claims c ON c.function_id=f.id WHERE f.project_id=? AND c.agent_id=? ORDER BY f.vram",
+                proj["id"], agent.id)
+            if not rows:
+                return ("This is a blind project: claim a function to receive it. "
+                        "The function list and scope are withheld. Call claim_function to get one to work on.")
+            return "\n".join(f"- {r['name']} @0x{r['vram']:08X}: {r['n_insns']} insns, {r['status']}"
+                             + (f", best score {r['best_score']}" if r["best_score"] is not None else "") for r in rows)
         where = "" if status == "all" else " AND f.status=?"
         args = [proj["id"]] + ([] if status == "all" else [status])
         rows = self.store.all(
@@ -914,6 +938,15 @@ class RomNetwork(Network):
         link = self._link(project)
         if link is None:
             return super().claim(agent, project, function, strategy)
+        # Blind-room member: the host assigns a function and sends its asm; nothing is synced (no scope).
+        if self.rebrew.is_member_shell(self._project(project)):
+            info = link.claim_full(agent, function, strategy)
+            if not info.get("function"):
+                return "Nothing left to claim in this room — every open function is matched or someone is on it. 🎉"
+            proj = self._project(project)
+            self.rebrew.record_claimed(proj, info["function"], info.get("vram") or 0, info.get("asm") or "")
+            fn = self.claim_row(agent, project, info["function"], strategy)
+            return self._brief(fn, agent, header="CLAIMED")
         if function:
             function = self._function(function, project)["name"]
         name = link.claim(agent, function, strategy)
@@ -942,6 +975,14 @@ class RomNetwork(Network):
         if (fork := self.fork_slug(project)):
             return self.forks.attempt(agent, fork, function, source)
         link = self._link(project)
+        # Blind-room member: no local binary to judge against — the host compiles + judges and returns the diff.
+        if link is not None and self.rebrew.is_member_shell(self._project(project)):
+            name = self._function(function, project)["name"]
+            v = link.attempt(agent, name, source)
+            text = v.get("text") or f"score {v.get('score')}"
+            if v.get("matched"):
+                text = "✅ MATCH — confirmed by the host.\n" + text
+            return {"text": text, "score": v.get("score"), "matched": bool(v.get("matched"))}
         before = self._function(function, project)["best_score"] if link else None
         res = super().attempt(agent, function, source, project)
         if link is None or res["score"] is None:
@@ -1178,6 +1219,8 @@ class RomNetwork(Network):
             "SELECT COUNT(*) AS total, SUM(status='matched') AS matched, SUM(size) AS bytes, "
             "SUM(CASE WHEN status='matched' THEN size ELSE 0 END) AS matched_bytes, SUM(attempts) AS attempts "
             "FROM functions WHERE project_id=?", proj["id"])
+        if self.rebrew.is_rebrew(proj):  # rebrew toolchains live in rebrew's registry, not decompnet's
+            return self.rebrew.overview(slug, proj, agg)
         tc = toolchains.get(cfg["compiler"]["toolchain"])
         return {
             "slug": proj["slug"], "title": proj["name"], "description": proj["description"],
