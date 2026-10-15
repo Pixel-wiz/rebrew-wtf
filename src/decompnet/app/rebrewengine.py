@@ -135,7 +135,10 @@ class RebrewEngine:
         cfg = load_config(workdir)
         funcs = self._functions(cfg)   # name -> (symbol, va, size)
         if not funcs:
-            raise NetworkError("no functions found in the binary's symbol table")
+            funcs = self._discover(Path(cfg.target_binary), workdir, log)   # stripped: recover via Ghidra
+        if not funcs:
+            raise NetworkError("no functions found: the binary's symbol table is empty (stripped) and Ghidra "
+                               "function discovery is unavailable or found nothing")
         arch = _ARCH.get(cfg.arch, "x86_64")
 
         import hashlib
@@ -275,6 +278,19 @@ class RebrewEngine:
     def _functions(cfg) -> dict[str, tuple[str, int, int]]:
         """name -> (symbol, va, size) from the binary's own symbol table (authoritative)."""
         return _symbols_via_lief(cfg.target_binary)
+
+    @staticmethod
+    def _discover(binary: Path, workdir: Path, log=print) -> dict[str, tuple[str, int, int]]:
+        """Stripped binary: recover function boundaries with Ghidra (no symbols needed). Returns the same
+        name -> (symbol, va, size) shape as _functions; symbol = the Ghidra name (ignored in blind rooms)."""
+        from ..forks import ghidra as _g
+
+        if not _g.available():
+            return {}
+        log("no symbols (stripped): recovering functions with Ghidra — this runs once")
+        fmap = _g.functions(binary, workdir / ".ghidra-cache")
+        log(f"Ghidra found {len(fmap)} functions")
+        return {name: (name, va, size) for name, (va, size) in fmap.items()}
 
     # ------------------------------------------------- compile + judge seam
 

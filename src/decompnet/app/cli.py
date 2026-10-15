@@ -357,16 +357,20 @@ def join(args) -> int:
     """Join a team's room with your own copy of the game (decomp.wtf starts in the background if needed)."""
     from .bridge import ensure_app
 
-    game = Path(args.game).expanduser()
-    if not game.is_file():
-        raise SystemExit(f"no file at {game}")
-    if not args.own_copy:
-        if not sys.stdin.isatty():
-            raise SystemExit("confirm that this is your own legally obtained copy of the game: add --own-copy")
-        if input(f"Is {game.name} your own legally obtained copy of the game? [y/N] ").strip().lower() not in ("y", "yes"):
-            raise SystemExit("decomp.wtf only works with your own copy of a game")
+    game = Path(args.game).expanduser() if args.game else None
+    if game is not None:
+        if not game.is_file():
+            raise SystemExit(f"no file at {game}")
+        if not args.own_copy:
+            if not sys.stdin.isatty():
+                raise SystemExit("confirm that this is your own legally obtained copy of the game: add --own-copy")
+            if input(f"Is {game.name} your own legally obtained copy of the game? [y/N] ").strip().lower() not in ("y", "yes"):
+                raise SystemExit("decomp.wtf only works with your own copy of a game")
     info = ensure_app(home_dir())
-    q = urllib.parse.urlencode({"link": args.link, "name": args.name, "confirmed": "1", "path": str(game.resolve())})
+    params = {"link": args.link, "name": args.name, "confirmed": "1"}
+    if game is not None:  # blind room: no file — the host holds the binary and judges remotely
+        params["path"] = str(game.resolve())
+    q = urllib.parse.urlencode(params)
     req = urllib.request.Request(f"http://127.0.0.1:{info['port']}/api/collab/join?{q}", method="POST",
                                  data=b"", headers={"Cookie": f"decomp_live={info['secret']}", "X-Decomp": "1",
                                                                   "Host": f"127.0.0.1:{info['port']}",
@@ -454,7 +458,7 @@ def main(argv: list[str] | None = None) -> int:
     ho.add_argument("--service", action="store_true", help="also run decomp.wtf as a service that starts with the computer")
     jo = sub.add_parser("join", help="join a team's room with your own copy of the game")
     jo.add_argument("link", help="the invite link (or the room's address for a public room)")
-    jo.add_argument("game", help="your copy of the same game")
+    jo.add_argument("game", nargs="?", help="your copy of the same game (omit for a blind room: you get no binary)")
     jo.add_argument("--name", required=True, help="your name in the room")
     jo.add_argument("--own-copy", action="store_true", help="confirm it's your own legally obtained copy")
     sv = sub.add_parser("service", help="run decomp.wtf in the background, starting with the computer")
