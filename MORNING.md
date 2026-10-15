@@ -95,3 +95,11 @@ What's established instead: (1) the historical record shows 215/1695 matched by 
 (`@claude-2`, `@antigravity-2`, `@codex-1`) while it was up — real multi-member matching happened; (2) the live
 multi-member matching PATH is independently proven in rebrew-wtf (two-process session over a real tunnel, host
 judged a separate member's match). The only missing piece is the remote host being reachable, which is external.
+
+## Star Fox second-member match — now LIVE (not just read-only)
+Since the teammate's room host is offline, I self-hosted a Star Fox 64 room from a COPY (live joined project
+untouched): host process opened a real cloudflare tunnel and judged with IDO 5.3; a SEPARATE guest process
+("nightbuild", own ROM copy, own DB) joined over the public URL, claimed func_80010800, and matched it.
+Both sides confirmed: HOST `members=1, func_80010800 status=matched, matched_by=nightbuild...`; GUEST
+`matched=True, score=0`. A genuine live second-member match on the actual game. Copies cleaned up afterward.
+Scripts: dev/sf_live_host.py + dev/sf_live_guest.py.
