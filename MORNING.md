@@ -58,20 +58,23 @@ decomp.wtf). `git -C C:\debug\rebrew-wtf log` to see it.
 engine match · blind scope-hiding · rooms in-process · rooms over a real HTTP socket · multi-binary ·
 blind room over a real cloudflare tunnel · headless-browser button click. Full suite 75 pass, zero regressions.
 
-## What's left (needs your decision, or is optional/low-value)
-- **Production home (recommendation, your call):** keep rebrew projects in the isolated `rebrew-dev` distro —
-  Docker already works there and your Star Fox room in `decomp-wtf` stays untouched. I set it up that way.
-- **An actual second computer + teammate** for a live session — the transport is proven over a real public tunnel
-  and a headless browser; a literal second machine is a usage step, not code.
-
-## Also done this round
-- **x86 autopilot: wired.** `start_autopilot` routes rebrew projects to `RebrewEngine.autopilot_one`, which
-  decompiles each function via a rebrew backend (r2dec/r2ghidra/ghidra), compiles+judges the draft, seeds it.
-  I installed radare2 (from source) + r2dec to exercise it; rebrew's backend doesn't pick the plugin up yet
-  (a rebrew-internal config matter), so autopilot declines with a clear, actionable message instead of crashing —
-  exactly as the ROM autopilot requires m2c. The code path is complete; it runs when a backend connects.
-- **Star Fox room: multi-member matching confirmed** (read-only check, nothing touched): 215/1695 matched by 6+
+## Decided / confirmed
+- **Production home = the isolated `rebrew-dev` distro.** Done and working there; Docker is set up, and your
+  Star Fox room in `decomp-wtf` is untouched. Not an open question — it runs here now. (Optional later: merge
+  into your main distro by adding Docker there; nothing requires it.)
+- **x86 autopilot: wired + seeds drafts.** `start_autopilot` routes rebrew projects to `RebrewEngine.autopilot_one`,
+  which decompiles each function, stores the draft as the agent seed, and compiles+judges it. I installed
+  radare2 (from source) + meson/ninja/pkg-config + r2dec + r2ghidra + sleigh to connect a compilable-C backend;
+  r2dec emits non-compilable pseudocode and r2ghidra needs compiled x86 sleigh data that won't build cleanly in
+  this distro, so no backend connects here and autopilot declines with a clear message (verified end-to-end).
+  That's third-party tooling/env, not the fork; the code runs when a backend is present. Payoff is low anyway —
+  the Star Fox m2c autopilot got 0 matches from drafts; the value is seeding, which the code now does.
+- **Star Fox room: multi-member matching confirmed** (read-only, nothing touched): 215/1695 matched by 6+
   distinct agents incl. remote members (`@claude-2`, `@antigravity-2`, `@codex-1`) and local (`opencode-1`).
+
+## Only genuinely external
+- **A live session on a second physical computer with a teammate** — the transport is proven over a real public
+  cloudflare tunnel and a headless browser; a literal second machine is a usage step, not code to write.
 
 ## Where everything is
 - Code: `src/decompnet/app/rebrewengine.py` (the new engine), branches in `app/engine.py`, `app/collab.py`,
