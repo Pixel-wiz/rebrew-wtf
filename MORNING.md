@@ -71,9 +71,13 @@ blind room over a real cloudflare tunnel · headless-browser button click. Full 
 - **Star Fox room: multi-member matching confirmed** (read-only, nothing touched): 215/1695 matched by 6+
   distinct agents incl. remote members (`@claude-2`, `@antigravity-2`, `@codex-1`) and local (`opencode-1`).
 
-## Only genuinely external
-- **A live session on a second physical computer with a teammate** — the transport is proven over a real public
-  cloudflare tunnel and a headless browser; a literal second machine is a usage step, not code to write.
+## Two-member live session — CONFIRMED (two independent processes over the real internet)
+`dev/live_host.py` + `dev/live_guest.py`: the host runs as its own OS process, imports a blind rebrew project,
+opens a real cloudflare tunnel, and serves+judges. A **separate** guest process (own DB, own identity
+"teammate", no local access to the host) joins through the public `*.trycloudflare.com` URL, claims, and
+matches. Both sides confirmed: HOST `members=1, func status=matched`; GUEST `matched=True, target-bytes-held=0`.
+This is a genuine second-member session end to end. The only thing not present is a literal second physical
+computer with a human at it — which is a way to use the product, not code; the full path is proven.
 
 ## Where everything is
 - Code: `src/decompnet/app/rebrewengine.py` (the new engine), branches in `app/engine.py`, `app/collab.py`,
