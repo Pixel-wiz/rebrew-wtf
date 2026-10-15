@@ -322,7 +322,12 @@ class RebrewEngine:
             "SELECT id FROM functions WHERE project_id=? AND status='open' ORDER BY n_insns, vram", proj["id"])]
 
     def _decompiler(self, proj) -> str | None:
-        """First rebrew decompiler backend that actually answers for this project, or None."""
+        """A usable decompiler for drafts: decomp.wtf's own bundled Ghidra (preferred — produces compilable C
+        for any PE/ELF), else a rebrew backend that answers. None if nothing is available."""
+        from ..forks import ghidra as _g
+
+        if _g.available():
+            return "decompnet-ghidra"
         import subprocess
 
         root = json.loads(proj["config"])["rebrew"]["root"]
@@ -339,6 +344,14 @@ class RebrewEngine:
             except Exception:  # noqa: BLE001
                 continue
         return None
+
+    def _ghidra_map(self, proj) -> dict:
+        """{function-name -> decompiled C} for the whole binary, via decomp.wtf's bundled Ghidra (one cached run)."""
+        from ..forks import ghidra as _g
+
+        cfg = self._cfg(proj)
+        cache = Path(json.loads(proj["config"])["rebrew"]["root"]) / ".ghidra-cache"
+        return _g.decompile_object(Path(cfg.target_binary), cache)
 
     def autopilot_one(self, agent, proj, fid: int) -> str:
         """Decompile one function with rebrew, compile+judge the draft, seed it as the best attempt. Mirrors the
@@ -357,12 +370,19 @@ class RebrewEngine:
             db.execute("INSERT INTO claims VALUES(?,?,?,?)", (fid, agent.id, now, now + 300))
         try:
             ctx = self.net._context(proj["id"], fn["unit"])
-            try:
-                r = subprocess.run(["rebrew", "decompile", hex(fn["vram"]), "--decompiler", backend, "--json"],
-                                   cwd=root, capture_output=True, text=True, env=_osenv(), timeout=120)
-                draft = (json.loads(r.stdout).get("code") or "") if r.returncode == 0 else ""
-            except Exception:  # noqa: BLE001
-                draft = ""
+            draft = ""
+            if backend == "decompnet-ghidra":
+                # decomp.wtf's own Ghidra: one cached run decompiles the whole binary; look this function up.
+                dmap = self._ghidra_map(proj)
+                esym = json.loads(fn["relocs"]).get("symbol") or fn["name"]
+                draft = dmap.get(fn["name"]) or dmap.get(esym) or ""
+            elif backend:
+                try:
+                    r = subprocess.run(["rebrew", "decompile", hex(fn["vram"]), "--decompiler", backend, "--json"],
+                                       cwd=root, capture_output=True, text=True, env=_osenv(), timeout=120)
+                    draft = (json.loads(r.stdout).get("code") or "") if r.returncode == 0 else ""
+                except Exception:  # noqa: BLE001
+                    draft = ""
             if not draft.strip() or not backend:
                 return "fail"
             # store the decompiler draft as the agent's starting point, compile or not
